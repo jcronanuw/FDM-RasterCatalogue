@@ -135,7 +135,7 @@ bottom_right <- c(1168, 2479)
 top_right <- c(993, 2479)
 
 #Run
-fpr <- 101
+fpr <- 102
 
 ss_rows <- 1168-993+1
 ss_cols <- 2479-2227+1

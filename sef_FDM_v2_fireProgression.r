@@ -33,12 +33,12 @@
   
   #Select a run ID, this should be a number, ideally unique that will help track this
   #run. Output files are tagged with this ID number.
-  RUN <- 101
+  RUN <- 102
   
   #Reporting interval, how often (in model years) should output maps be produced?
   #I.e., once every ... years.
   #Must be less than model run time (YEARS object)
-  Interval <- 1
+  Interval <- 5
   
   #What is your working directory. I.e. where are your input files coming from?
   input_path <- "C:/Users/jcronan/Documents/GitHub/FDM-RasterCatalogue/FDM_inputs"     
@@ -59,7 +59,7 @@
   if (disturbance_regime == "MANUAL")
   {
     #Number of years the model should run for.
-    YEARS <- 25
+    YEARS <- 1
     
     #Acres thinned annually.
     THINNING <- 0
@@ -1210,7 +1210,7 @@ md.valu <- as.vector(unlist(metadata[,2]))
    
     #The number of fires per year is drawn from the Poisson Distribution (Wimberly 2002)
     #FF = Annual Fire Frequency. This is calculated in step 7.
-    fino.e <- 6 <- min(rpois(1,FF.e),Truncate.Number[1])
+    fino.e <- 6 #<- min(rpois(1,FF.e),Truncate.Number[1])
     #For the buffer zone the number of fires is predicted by the number of fires at
     #Eglin so the severity of the wildfire season is synchronized.
     fino.b <- min(round((max(1,fino.e)*(FF.b/FF.e)),0),Truncate.Number[2])
@@ -1235,7 +1235,7 @@ md.valu <- as.vector(unlist(metadata[,2]))
           #year period. No year produced a burned area over ?????? ha for the 1,619,226 ha
           #map area
           #if(sum(fiar.e) > Truncate.AAB[1])
-            {
+            #{
               #fiar.e <- mapply(function(x) (x/sum(fiar.e)) * min(sum(fiar.e),Truncate.AAB[1]),
                #                fiar.e) 
               #SIMPLER VERSION
@@ -2161,6 +2161,9 @@ md.valu <- as.vector(unlist(metadata[,2]))
       for (e in tdn[tdy == a])#e <- 2
     { #8.0.0 ---------------------------------------------------------------------------
     
+    #Reset j (tracks fire progression output maps)
+    j <- 0        
+    
     #Create an overlay fuelbed map that can show background fuelbeds and fire progression map.
     if(e > 1)
     {
@@ -2179,7 +2182,7 @@ md.valu <- as.vector(unlist(metadata[,2]))
      #Tracks expansions for loop 8
       expansions_loop8 <- vector(length =, mode = 'numeric')
       
-     #Resent tesn
+     #Reset tesn
         tesn <- -1
         
         #Reset object that tracks completely burned units, used in loop 9
@@ -2241,6 +2244,15 @@ md.valu <- as.vector(unlist(metadata[,2]))
               #Default g loop number.
               g <- 0
               h <- 0
+              
+              #Tracks fire progression output maps
+              if(j == 0)
+              {
+                j <- 1
+              } else
+              {
+                j <- j + 1
+              }
               
               #Reset cumulative temporary stand numbers
               tesn_cum <- vector()
@@ -2462,21 +2474,43 @@ md.valu <- as.vector(unlist(metadata[,2]))
      
      #Assign stand number
      s.map[scd[1]] <- tesn
-     fireProg.map[s.map == tesn] <- tesn
-     
-     
-     
-     #Save fuelbed map.
-     
-     
-     
-     write.table(fireProg.map, file = paste(output_path, "sef_fpmap_run_", run, "_year_", 
-                                            a,"_disturbance_",e,"_outer_",f,"_inner_",g,".txt",sep = ""), 
-                 append = FALSE, quote = TRUE, sep = " ", eol = "\n", na = "NA", 
-                 dec = ".", row.names = FALSE,col.names = FALSE, qmethod = 
-                   c("escape", "double"))#    
      
      #Update fire progression map
+     fireProg.map[fireProg.map < 0] <- fireProg.map[fireProg.map < 0] - 1
+     fireProg.map[s.map == tesn] <- tesn
+     
+     #Seprate header metadata into seperate lines.
+     line1 <- paste(paste(md.desc[1]), paste("         ", md.valu[1]))
+     line2 <- paste(paste(md.desc[2]), paste("         ", md.valu[2]))
+     line3 <- paste(paste(md.desc[3]), paste("     ", md.valu[3]))
+     line4 <- paste(paste(md.desc[4]), paste("     ", md.valu[4]))
+     line5 <- paste(paste(md.desc[5]), paste("      ", md.valu[5]))
+     line6 <- paste(paste(md.desc[6]), paste("  ", md.valu[6]))
+     
+     #Print header information to fire progression map
+     cat(line1, 
+         file = paste(output_path, "r", run, "",e, 
+                      "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+     cat(line2, 
+         file = paste(output_path, "r", run, "",e, 
+                      "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+     cat(line3, 
+         file = paste(output_path, "r", run, "",e, 
+                      "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+     cat(line4, 
+         file = paste(output_path, "r", run, "",e, 
+                      "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+     cat(line5, 
+         file = paste(output_path, "r", run, "",e, 
+                      "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+     cat(line6, 
+         file = paste(output_path, "r", run, "",e, 
+                      "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+     
+     #Save fire progression map.
+     cat(c(t(fireProg.map)), file = paste(output_path, "r", run, "",e, 
+                                          "",f,"",j,".asc",sep = ""), 
+         fill = FALSE, append = TRUE)#    
      
      #Used for measuring area of fire in tracking objects
      tesn_cum <- tesn
@@ -2678,6 +2712,9 @@ md.valu <- as.vector(unlist(metadata[,2]))
                 #growth stops.
                 for (g in 1:r.max)#g <- 1
                 { #10.0.0 --------------------------------------------------------------------------
+                  
+                  #Update j (tracks fire progression output maps).
+                  j <- j + 1
                   
                   #Area mapped by iteration[f].
                   #dema <- length(as.vector(s.map[s.map %in% loopF.NewStand]))
@@ -2889,6 +2926,7 @@ md.valu <- as.vector(unlist(metadata[,2]))
       fireProg.map[fireProg.map < 0] <- fireProg.map[fireProg.map < 0] - 1
       fireProg.map[s.map == ((g*-1)-1)] <- -1
       
+      #Seprate header metadata into seperate lines.
       line1 <- paste(paste(md.desc[1]), paste("         ", md.valu[1]))
       line2 <- paste(paste(md.desc[2]), paste("         ", md.valu[2]))
       line3 <- paste(paste(md.desc[3]), paste("     ", md.valu[3]))
@@ -2898,34 +2936,28 @@ md.valu <- as.vector(unlist(metadata[,2]))
       
       #Print header information to fire progression map
       cat(line1, 
-          file = paste(output_path, "sef_fpmap_auto_run_", run, "_year_", a,"_disturbance_",e, 
-                       "_outer_",f,"_inner_",g,".txt",sep = ""), fill = T, append = T)#
+          file = paste(output_path, "r", run, "",e, 
+                       "",f,"",j,".asc",sep = ""), fill = T, append = T)#
       cat(line2, 
-          file = paste(output_path, "sef_fpmap_auto_run_", run, "_year_", a,"_disturbance_",e, 
-                       "_outer_",f,"_inner_",g,".txt",sep = ""), fill = T, append = T)#
+          file = paste(output_path, "r", run, "",e, 
+                       "",f,"",j,".asc",sep = ""), fill = T, append = T)#
       cat(line3, 
-          file = paste(output_path, "sef_fpmap_auto_run_", run, "_year_", a,"_disturbance_",e, 
-                       "_outer_",f,"_inner_",g,".txt",sep = ""), fill = T, append = T)#
+          file = paste(output_path, "r", run, "",e, 
+                       "",f,"",j,".asc",sep = ""), fill = T, append = T)#
       cat(line4, 
-          file = paste(output_path, "sef_fpmap_auto_run_", run, "_year_", a,"_disturbance_",e, 
-                       "_outer_",f,"_inner_",g,".txt",sep = ""), fill = T, append = T)#
+          file = paste(output_path, "r", run, "",e, 
+                       "",f,"",j,".asc",sep = ""), fill = T, append = T)#
       cat(line5, 
-          file = paste(output_path, "sef_fpmap_auto_run_", run, "_year_", a,"_disturbance_",e, 
-                       "_outer_",f,"_inner_",g,".txt",sep = ""), fill = T, append = T)#
+          file = paste(output_path, "r", run, "",e, 
+                       "",f,"",j,".asc",sep = ""), fill = T, append = T)#
       cat(line6, 
-          file = paste(output_path, "sef_fpmap_auto_run_", run, "_year_", a,"_disturbance_",e, 
-                       "_outer_",f,"_inner_",g,".txt",sep = ""), fill = T, append = T)#
+          file = paste(output_path, "r", run, "",e, 
+                       "",f,"",j,".asc",sep = ""), fill = T, append = T)#
       
       #Save fuelbed map.
-      cat(fireProg.map, file = paste(output_path, "sef_fpmap_auto_run_", run, "_year_", 
-                                             a,"_disturbance_",e,"_outer_",f,"_inner_",g,".txt",sep = ""), 
+      cat(c(t(fireProg.map)), file = paste(output_path, "r", run, "",e, 
+                                           "",f,"",j,".asc",sep = ""), 
           fill = FALSE, append = TRUE)#    
-      
-      write.table(fireProg.map, file = paste(output_path, "sef_fpmap_manu_run_", run, "_year_", 
-                                             a,"_disturbance_",e,"_outer_",f,"_inner_",g,".txt",sep = ""), 
-                  append = FALSE, quote = TRUE, sep = " ", eol = "\n", na = "NA", 
-                  dec = ".", row.names = FALSE,col.names = FALSE, qmethod = 
-                    c("escape", "double"))# 
       
     } #10.4.2 --------------------------------------------------------------------------
 } #10.3.2 --------------------------------------------------------------------------
@@ -2991,13 +3023,42 @@ md.valu <- as.vector(unlist(metadata[,2]))
              }
        }
    
-  fireProg.map[s.map %in% tesn] <- -1
+  #Update fire progression map
+  fireProg.map[fireProg.map < 0] <- fireProg.map[fireProg.map < 0] - 1
+  fireProg.map[s.map %in% s.map[scd] * tesn_t] <- -1
+  
+  #Seprate header metadata into seperate lines.
+  line1 <- paste(paste(md.desc[1]), paste("         ", md.valu[1]))
+  line2 <- paste(paste(md.desc[2]), paste("         ", md.valu[2]))
+  line3 <- paste(paste(md.desc[3]), paste("     ", md.valu[3]))
+  line4 <- paste(paste(md.desc[4]), paste("     ", md.valu[4]))
+  line5 <- paste(paste(md.desc[5]), paste("      ", md.valu[5]))
+  line6 <- paste(paste(md.desc[6]), paste("  ", md.valu[6]))
+  
+  #Print header information to fire progression map
+  cat(line1, 
+      file = paste(output_path, "r", run, "",e, 
+                   "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+  cat(line2, 
+      file = paste(output_path, "r", run, "",e, 
+                   "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+  cat(line3, 
+      file = paste(output_path, "r", run, "",e, 
+                   "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+  cat(line4, 
+      file = paste(output_path, "r", run, "",e, 
+                   "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+  cat(line5, 
+      file = paste(output_path, "r", run, "",e, 
+                   "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+  cat(line6, 
+      file = paste(output_path, "r", run, "",e, 
+                   "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+  
   #Save fuelbed map.
-  write.table(fireProg.map, file = paste(output_path, "sef_fpmap_run_", run, "_year_", 
-                                         a,"_disturbance_",e,"_outer_",f,"_inner_",g,".txt",sep = ""), 
-              append = FALSE, quote = TRUE, sep = " ", eol = "\n", na = "NA", 
-              dec = ".", row.names = FALSE,col.names = FALSE, qmethod = 
-                c("escape", "double"))#    
+  cat(c(t(fireProg.map)), file = paste(output_path, "r", run, "",e, 
+                                       "",f,"",j,".asc",sep = ""), 
+      fill = FALSE, append = TRUE)#    
   
   #For fires determine and apply growth rate cutoff
   #Pick a cutoff growth rate between 0.5% and 5% from an exponential
@@ -3023,10 +3084,11 @@ md.valu <- as.vector(unlist(metadata[,2]))
    for (h in 1:r.max)#h <- 2
    { #11.0.0 ---------------------------------------------------------------------------
       
-     #Update g, used to name fire progression output maps.
-     g <- h
-       #Area mapped for fire[e].
-       dema <- length(as.vector(s.map[s.map %in% loopF.NewStand]))
+     #Update j, used to name fire progression output maps.
+      j <- j + 1
+    
+     #Area mapped for fire[e].
+      dema <- length(as.vector(s.map[s.map %in% loopF.NewStand]))
   
      #This statement stops loop 11 when treatment[b] has been fully mapped.
      if((dema + length(ocod)) < desa) 
@@ -3131,17 +3193,44 @@ md.valu <- as.vector(unlist(metadata[,2]))
                              }#-------------------------------------------------D-FALSE
                        }#-------------------------------------------------------C-FALSE
                  }#-------------------------------------------------------------A-FALSE
-  
+         
          #Update fire progression map
          fireProg.map[fireProg.map < 0] <- fireProg.map[fireProg.map < 0] - 1
          fireProg.map[new.cells] <- -1
          
+         #Seprate header metadata into seperate lines.
+         line1 <- paste(paste(md.desc[1]), paste("         ", md.valu[1]))
+         line2 <- paste(paste(md.desc[2]), paste("         ", md.valu[2]))
+         line3 <- paste(paste(md.desc[3]), paste("     ", md.valu[3]))
+         line4 <- paste(paste(md.desc[4]), paste("     ", md.valu[4]))
+         line5 <- paste(paste(md.desc[5]), paste("      ", md.valu[5]))
+         line6 <- paste(paste(md.desc[6]), paste("  ", md.valu[6]))
+         
+         #Print header information to fire progression map
+         cat(line1, 
+             file = paste(output_path, "r", run, "",e, 
+                          "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+         cat(line2, 
+             file = paste(output_path, "r", run, "",e, 
+                          "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+         cat(line3, 
+             file = paste(output_path, "r", run, "",e, 
+                          "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+         cat(line4, 
+             file = paste(output_path, "r", run, "",e, 
+                          "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+         cat(line5, 
+             file = paste(output_path, "r", run, "",e, 
+                          "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+         cat(line6, 
+             file = paste(output_path, "r", run, "",e, 
+                          "",f,"",j,".asc",sep = ""), fill = T, append = T)#
+         
          #Save fuelbed map.
-         write.table(fireProg.map, file = paste(output_path, "sef_fpmap_run_", run, "_year_", 
-                                                a,"_disturbance_",e,"_outer_",f,"_inner_",g,".txt",sep = ""), 
-                     append = FALSE, quote = TRUE, sep = " ", eol = "\n", na = "NA", 
-                     dec = ".", row.names = FALSE,col.names = FALSE, qmethod = 
-                       c("escape", "double"))#    
+         cat(c(t(fireProg.map)), file = paste(output_path, "r", run, "",e, 
+                                              "",f,"",j,".asc",sep = ""), 
+             fill = FALSE, append = TRUE)#    
+         
          
            osnd <- c(osnd, s.map[new.cells]) #tracks stand numbers involved in disturbance.
            ocod <- c(ocod, new.cells) #tracks coordinates involved in disturbance.
