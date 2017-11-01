@@ -1,0 +1,7 @@
+"title","values"
+"1","ncols",253
+"2","nrows",176
+"3","xllcorner",558055.097528
+"4","yllcorner",3377397.8503251
+"5","cellsize",30
+"6","NODATA_value",-9999
