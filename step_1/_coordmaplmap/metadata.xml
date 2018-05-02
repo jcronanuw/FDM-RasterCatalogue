@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata xml:lang="en"><Esri><CreaDate>20171008</CreaDate><CreaTime>18263500</CreaTime><ArcGISFormat>1.0</ArcGISFormat><SyncOnce>TRUE</SyncOnce><DataProperties><lineage><Process ToolSource="C:\Program Files (x86)\ArcGIS\Desktop10.0\ArcToolbox\Toolboxes\Conversion Tools.tbx\ASCIIToRaster" Date="20171008" Time="182635">ASCIIToRaster C:\Users\jcronan\Documents\GitHub\EglinAirForceBase\inputs\sef_lmap_1771x3491.txt C:\usfs_cronan_gis\SEF\EAFB_CoordMap\_CoordMaplmap INTEGER</Process></lineage></DataProperties></Esri></metadata>

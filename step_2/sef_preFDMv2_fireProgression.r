@@ -1,0 +1,661 @@
+
+###################################################################################################
+############################-----start-----########################################################
+#Author: Jim Cronan
+
+#Create GitHub repository (FDM-preProcessing): October 8, 2017
+#Updated: October 08, 2017
+#Tested: October 8, 2017
+#Moved to GitHub FDM-RasterCatalog repository on November 15, 2017
+#Updated on Noveember 15, 2017
+
+
+#This script was updated from C:\usfs_r_scripts\sef_2016.06.02_preFDMv2.r
+#It has been updated to allow user to subset the map so a smaller set of data
+#can be modelled in the FDM-fireProgression package.
+
+#See README.md for more details
+
+###################################################################################################
+###################################################################################################
+#STEP #1: ADMINISTRATIVE TASKS
+
+#Reset functions
+rm(list=ls())
+dev.off()
+
+#This code sets up tables used to make the mapping loop run more efficiently in
+#the Fuelbed Dynamics Model. Inputs are set to a 4 ha resolution map.
+library(Hmisc)
+
+#Create input and output paths for inbound/outbound data.
+input_path <- "C:/Users/jcronan/Documents/GitHub/FDM-RasterCatalogue/step_2/step_2_inputs"     
+output_path <- "C:/Users/jcronan/Documents/GitHub/FDM-RasterCatalogue/FDM_inputs"     
+
+#Set working directory
+setwd(input_path)
+
+####################################################################################
+####################################################################################
+#STEP 2: LOAD INPUT FILES
+
+#Load input parameters
+params <- read.table("sef_pre_parameters.csv", header=T, 
+                     sep=",", na.strings="NA", dec=".", strip.white=TRUE)
+
+#Load metadata for raster images
+metadata <- read.table("sef_raster_metadata.txt", header=T, 
+                       sep=",", na.strings="NA", dec=".", strip.white=TRUE)
+options(digits = 15)#displays meters to same degree of precision as header
+#data from ArcMap
+
+#This metadata is for original map and extent, not subset map
+#Number of rows
+rows <- metadata$values[metadata$title == "nrows"]
+#Number of columns
+cols <- metadata$values[metadata$title == "ncols"]
+#Number of rows with header data.
+header <- length(metadata[,1])
+
+#Fuelbed map
+f.map <- matrix(scan(paste("sef_fmap_v2_",rows,"x",cols,".txt",
+                           sep = ""),skip = header),ncol=cols,byrow=T)
+
+#Stand map
+s.map <- matrix(scan(paste("sef_smap_060216_",rows,"x",cols,".txt",
+                           sep = ""),skip = header),ncol=cols,byrow=T)
+
+#Stand age map
+a.map <- matrix(scan(paste("sef_amap_",rows,"x",cols,".txt",
+                           sep = ""),skip=header),ncol=cols,byrow=T)
+
+#Mean Fire Return Interval
+c.map <- matrix(scan(paste("sef_cmap_",rows,"x",cols,".txt",
+                           sep = ""),skip=header),ncol=cols,byrow=T)
+
+#Burn Unit Map
+b.map <- matrix(scan(paste("sef_bmap_",rows,"x",cols,".txt",
+                           sep = ""),skip=header),ncol=cols,byrow=T)
+
+#Coordinate Map
+l.map <- matrix(scan(paste("sef_lmap_",rows,"x",cols,".txt",
+                           sep = ""),skip = header),ncol=cols,byrow=T)
+
+#Time-Since-Last-Treatment Map
+tslt.map <- matrix(scan(paste("C:/usfs_sef_data_ascii/sef_tslt_map_", 
+                              rows, "x", cols,".txt", sep = ""),
+                        skip = header),ncol=cols,byrow=T)
+
+#State and Transition Model
+fuelbed_lut <- read.table("sef_lut_all.csv", header=TRUE, 
+                          sep=",", na.strings="NA", dec=".", strip.white=TRUE)
+
+#Burn block metadata table
+b.unit <- read.table("sef_lut_burn_units.txt", header=TRUE, 
+                     sep=",", na.strings="NA", dec=".", strip.white=TRUE)
+
+#Modify table by removing unnecessary data tables.
+b.unit <- b.unit[,-1]
+
+#Burn Block wildfire ignition probability.
+f.start <- read.table("sef_lut_pathways_fireStart.csv", header=T, 
+                      sep=",", na.strings="NA", dec=".", strip.white=TRUE)
+f.start <- f.start[-1,]#remove first row -- no data unit.
+
+
+
+####################################################################################
+#This function (grabbed from the r-help site) is the same as the sample()
+#function except if the length of x is one it will just use that number rather than
+#sample from 1:x.
+resample <- function(x, size, ...)
+  if(length(x) <= 1) { if(!missing(size) && size == 0) x[FALSE] else x
+  } else sample(x, size, ...)
+####################################################################################
+
+####################################################################################
+####################################################################################
+#STEP 3: SUBSET FIRE PROGRESSION MAP
+
+#Isolate values needed to calculate dimensions of fire progression cutout map.
+LowerLeft_Coord <- as.vector(unlist(which(l.map == params$Value[params$Variable == "Lower_Left"], 
+                                          arr.ind = T)), mode = "numeric")
+
+#Convert map dimensions in meters to map dimensions in pixels
+map_height <- round(params$Value[params$Variable == "y_length_m"]/metadata$values[metadata$title == "cellsize"], 0)
+map_length <- round(params$Value[params$Variable == "x_length_m"]/metadata$values[metadata$title == "cellsize"], 0)
+
+upper_left <- c(LowerLeft_Coord[1] - map_height, LowerLeft_Coord[2])
+lower_left <- LowerLeft_Coord
+lower_right <- c(LowerLeft_Coord[1], LowerLeft_Coord[2] + map_length)
+upper_right <- c(LowerLeft_Coord[1] - map_height, LowerLeft_Coord[2] + map_length)
+
+#Run
+fpr <- params$Value[params$Variable == "run_no"]
+
+ss_rows <- map_height + 1
+ss_cols <- map_length + 1
+
+#Subset maps
+f.map <- f.map[upper_left[1]:lower_left[1], lower_left[2]:lower_right[2]]
+a.map <- a.map[upper_left[1]:lower_left[1], lower_left[2]:lower_right[2]]
+b.map <- b.map[upper_left[1]:lower_left[1], lower_left[2]:lower_right[2]]
+c.map <- c.map[upper_left[1]:lower_left[1], lower_left[2]:lower_right[2]]
+s.map <- s.map[upper_left[1]:lower_left[1], lower_left[2]:lower_right[2]]
+tslt.map <- tslt.map[upper_left[1]:lower_left[2], lower_left[2]:lower_right[2]]
+l.map <- matrix(seq(1, (ss_rows * ss_cols)), ss_rows, ss_cols)
+
+#Record metadata information
+#These will be used as header data for the fire progression maps produced by
+#FDM-vFireProgression
+ncols <- ss_cols
+nrows <- ss_rows
+xllcorner <- metadata[3,2] + (metadata$values[metadata$title == "cellsize"] * (lower_left[2] - 1))
+yllcorner <- metadata[4,2] + (metadata$values[metadata$title == "cellsize"] * (rows - lower_left[1]))
+cellsize <- metadata$values[metadata$title == "cellsize"]
+NODATA_value <- metadata$values[metadata$title == "NODATA_value"]
+#The xll and yll (ll stands for lower left) corner data was produced by overlaying 
+#the coordinate map over the 
+#fuelbed map in ArcMap and navigating to the lower left corner of the subset map.
+#Coordinate of lower left corner is
+#Number of cells in a row times number of columns to lower left corner plus number of 
+#rows to lower left corner.
+#(1771 * 2227) + 993 = 3,945,010
+#In ArcMap find cell with value of 3,945,010 on coordinate map (use 100% transparency
+#on coordinate map so youn can use fuelbed map to help you navigate). Once you find 
+#cell elimate transparency on coordinate map and use discrete color symbology to
+#highlight each cell with a different color. Use information pointer to highlight
+#upper left corner of this cell in 1:1 resolution and record easting and northing
+#in meters.
+
+#Save as text file
+
+#Combine metadata into a dataframe
+metadata <- data.frame(title = c("ncols", "nrows", "xllcorner", 
+                                                 "yllcorner", "cellsize", 
+                                                 "NODATA_value"), 
+                       values = c(ncols, nrows, xllcorner, yllcorner, cellsize, NODATA_value))
+
+
+#Save mean time-since-last-treatment map.
+write.table(metadata, file = paste(output_path, "/sef_", fpr, "_metadata_", 
+                                   ss_rows,"x",ss_cols, ".txt", sep = ""), 
+            append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+            dec = ".", row.names = TRUE,col.names = TRUE, qmethod = 
+              c("escape", "double"))#
+
+####################################################################################
+####################################################################################
+####################################################################################
+####################################################################################
+####################################################################################
+####################################################################################
+####################################################################################
+####################################################################################
+####################################################################################
+####################################################################################
+####################################################################################
+####################################################################################
+
+####################################################################################
+#Save subsetted maps so they can be pulled into fire-progression variant of FDM
+
+#Save fuelbed map.
+write.table(f.map, file = paste(output_path, "/sef_", fpr, "_fmap_R", 
+                                ss_rows,"xC",ss_cols, ".txt", sep = ""), 
+            append = FALSE, quote = TRUE, sep = " ", eol = "\n", na = "NA", 
+            dec = ".", row.names = FALSE,col.names = FALSE, qmethod = 
+              c("escape", "double"))#    
+
+#Save stand map.
+write.table(s.map, file = paste(output_path, "/sef_", fpr, "_smap_R", 
+                                ss_rows,"xC",ss_cols, ".txt", sep = ""), 
+            append = FALSE, quote = TRUE, sep = " ", eol = "\n", na = "NA", 
+            dec = ".", row.names = FALSE,col.names = FALSE, qmethod = 
+              c("escape", "double"))#    
+
+#Save coordinate map.
+write.table(l.map, file = paste(output_path, "/sef_", fpr, "_lmap_R", 
+                                ss_rows,"xC",ss_cols, ".txt", sep = ""), 
+            append = FALSE, quote = TRUE, sep = " ", eol = "\n", na = "NA", 
+            dec = ".", row.names = FALSE,col.names = FALSE, qmethod = 
+              c("escape", "double"))#    
+
+#Save stand age map.
+write.table(a.map, file = paste(output_path, "/sef_", fpr, "_amap_R", 
+                                ss_rows,"xC",ss_cols, ".txt", sep = ""), 
+            append = FALSE, quote = TRUE, sep = " ", eol = "\n", na = "NA", 
+            dec = ".", row.names = FALSE,col.names = FALSE, qmethod = 
+              c("escape", "double"))#    
+
+#Save burn unit map.
+write.table(b.map, file = paste(output_path, "/sef_", fpr, "_bmap_R", 
+                                ss_rows,"xC",ss_cols, ".txt", sep = ""), 
+            append = FALSE, quote = TRUE, sep = " ", eol = "\n", na = "NA", 
+            dec = ".", row.names = FALSE,col.names = FALSE, qmethod = 
+              c("escape", "double"))#    
+
+#Save mean fire return interval map.
+write.table(c.map, file = paste(output_path, "/sef_", fpr, "_cmap_R", 
+                                ss_rows,"xC",ss_cols, ".txt", sep = ""), 
+            append = FALSE, quote = TRUE, sep = " ", eol = "\n", na = "NA", 
+            dec = ".", row.names = FALSE,col.names = FALSE, qmethod = 
+              c("escape", "double"))#    
+
+#Save mean time-since-last-treatment map.
+write.table(tslt.map, file = paste(output_path, "/sef_", fpr, "_tsltmap_R", 
+                                ss_rows,"xC",ss_cols, ".txt", sep = ""), 
+            append = FALSE, quote = TRUE, sep = " ", eol = "\n", na = "NA", 
+            dec = ".", row.names = FALSE,col.names = FALSE, qmethod = 
+              c("escape", "double"))#  
+
+####################################################################################
+#Create a list of unique stand numbers (pseudo-vector stand map)
+Stand.List <- sort(unique(as.vector(s.map)))
+
+#Use management unit map to re-assign stand numbers in s.map.
+#Create a vecotr of management units
+management.units <- sort(unique(as.vector(b.map)))
+
+new.stands <- list()
+new.stands <- mapply(function(y)
+  {
+  unique(s.map[b.map == y])
+}, management.units)
+
+new.stands.2 <- unlist(new.stands)
+
+cor.units <- mapply(function(y)
+  {
+  rep(management.units[y],length(new.stands[[y]]))
+}, 1:length(management.units))
+
+
+cor.units.2 <- unlist(cor.units)
+
+#Create new table that lists all stands.
+write.table(Stand.List, file = paste(output_path, "/sef_", fpr, "_StandList_",
+                                     ss_rows,"x",ss_cols,".txt",sep = ""), 
+            append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+            dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+              c("escape", "double"))#
+####################################################################################
+
+####################################################################################
+#Create a list of randomly selected coordinate in each stand (pseudo-vector stand map)
+Coord.List <- mapply(function(x) resample(l.map[s.map == x],1), Stand.List)
+
+#Create new table that lists all stands.
+write.table(Coord.List, file = paste(output_path,"/sef_", fpr, "_CoordList_",
+                                     ss_rows,"x",ss_cols,".txt",sep = ""), 
+            append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+            dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+              c("escape", "double"))#
+
+####################################################################################
+
+####################################################################################
+#Create a list of fuelbeds in each stand (pseudo-vector fuelbed map)
+Fuelbed.List <- f.map[Coord.List]
+
+#Create new table that lists all stands.
+write.table(Fuelbed.List, file = paste(output_path, "/sef_", fpr, "_FuelbedList_",
+                                       ss_rows,"x",ss_cols,".txt",sep = ""), 
+            append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+            dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+              c("escape", "double"))#
+
+####################################################################################
+
+####################################################################################
+#Create a list of stand ages in each stand (pseudo-vector stand age map)
+Age.List <- a.map[Coord.List]
+
+#Create new table that lists all stands.
+write.table(Age.List, file = paste(output_path, "/sef_", fpr, "_AgeList_",
+                                   ss_rows,"x",ss_cols,".txt",sep = ""), 
+            append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+            dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+              c("escape", "double"))#
+
+####################################################################################
+
+####################################################################################
+#Create a list of mean fire return intervals for each stand 
+#(pseudo-vector mFRI map)
+mfri.List <- c.map[Coord.List]
+  
+#Create new table that lists all stands.
+write.table(mfri.List, file = paste(output_path, "/sef_", fpr, "_mfriList_",
+                                    ss_rows,"x",ss_cols,".txt",sep = ""), 
+            append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+            dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+              c("escape", "double"))#
+
+####################################################################################
+
+####################################################################################
+#Create a list of areas for each stand #(pseudo-vector stand map)
+Area.List <- mapply(function(x) length(s.map[s.map ==x]), Stand.List)
+
+#Create new table that lists all stands.
+write.table(Area.List, file = paste(output_path, "/sef_", fpr, "_AreaList_",
+                                    ss_rows,"x",ss_cols,".txt",sep = ""), 
+            append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+            dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+              c("escape", "double"))#
+
+####################################################################################
+
+####################################################################################
+#Create a list that shows the age each stand will be eligible for treatments
+MU.List <- b.map[Coord.List]
+  
+  #Create new table that lists all stands.
+  write.table(MU.List, file = paste(output_path, "/sef_", fpr, "_MUList_",
+                                    ss_rows,"x",ss_cols,".txt",sep = ""), 
+              append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+              dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+                c("escape", "double"))#
+####################################################################################
+
+####################################################################################
+#Create the mfri matrix table
+
+#This updates the mFRI list so all stands have the correct mFRI given
+#their fuelbed. This mostly corrects short mFRIs in non-burnable/low probability burn fuelbeds.
+#See above paragraph for more information.
+mfri.List_v2 <- mapply(function(y) 
+{
+  ifelse(any(mfri.List[y] < fuelbed_lut$mfri_lower[fuelbed_lut$fuelbed == Fuelbed.List[y]], 
+             mfri.List[y] > fuelbed_lut$mfri_upper[fuelbed_lut$fuelbed == Fuelbed.List[y]]) == T,
+         resample(seq(fuelbed_lut$mfri_lower[fuelbed_lut$fuelbed == Fuelbed.List[y]], 
+                      fuelbed_lut$mfri_upper[fuelbed_lut$fuelbed == Fuelbed.List[y]], 1), 1), 
+         mfri.List[y])
+}, 1:length(mfri.List))
+
+#Replace old (and incorrect) mfri.List with new one.
+mfri.List <- mfri.List_v2
+
+
+
+matcols <- 30
+mfri.Matrix <- matrix(data = 0, nrow = length(mfri.List), ncol = matcols)
+
+for(i in 1:length(mfri.List)) 
+{
+  if(mfri.List[i] == -9999)
+  {
+    mfri.Matrix[i,] <- rep(-9999,matcols)
+  } else
+  {
+    temp_mfri <- c(rep(1,ifelse(mfri.List[i] == 32,0,round(matcols/mfri.List[i],0))),
+                   rep(0,ifelse(mfri.List[i] == 32,30,(matcols-round(matcols/mfri.List[i],0)))))
+    mfri.Matrix[i,] <- sample(temp_mfri, length(temp_mfri))
+  }
+  }
+  
+#Create new mfri matrix.
+write.table(mfri.Matrix, file = paste(output_path, "/sef_", fpr, "_mfriMatrix_",
+                                      ss_rows,"x",ss_cols,".txt",sep = ""), 
+            append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+            dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+              c("escape", "double"))#
+
+#Create a time since last fire (TSLF) list for burn blocks
+
+#Create a new matrix that shows cumulative fires over the thirty year fire history you created
+#in mfri.Matrix
+cum.TSLF <- matrix(data = rep(0, (length(mfri.Matrix[,1]) * length(mfri.Matrix[1,]))), 
+                   nrow = length(mfri.Matrix[,1]), ncol = length(mfri.Matrix[1,]), byrow = FALSE)
+
+for(i in 1:length(mfri.Matrix[,1]))
+{
+  for(h in 1:length(mfri.Matrix[1,]))
+  {
+    cum.TSLF[i,h] <- sum(mfri.Matrix[i,1:h])
+  }
+}
+
+#Use the cumulative number of fires and mfri.Matrix to identify tslf (elements where
+#both mfri.Matrix and cum.TSLF == 1)
+#This function creates a matrix that only has a one for the most recent year there was
+#a fire.
+x.tslf <- ifelse(mfri.Matrix == 1 & cum.TSLF == 1,1,0)
+
+#This function creates a vector where each element lists the TSLF in years. 
+x2.tslf <- mapply(function(y) ifelse(length(which(x.tslf[y,] == 1)) == 0, 
+                                     31, which(x.tslf[y,] == 1)), 
+                  1:length(x.tslf[,1]))
+
+#Second step is to list the stand numbers in each burn unit.
+unit.stands <- list()
+ for(i in 1:length(b.unit$unit))
+ {
+  unit.stands[[i]] <- sort(unique(s.map[b.map == b.unit$unit[i]])) 
+}
+ 
+#Next step is to caclulate percentage of each burn unit in each tslf class (1:31 years)
+unit.TSLF <- matrix(data = rep(0, (length(b.unit$unit) * (length(mfri.Matrix[1,]) + 1))), 
+                    nrow = length(b.unit$unit), ncol = (length(mfri.Matrix[1,]) + 1), byrow = FALSE)
+for(i in 1:(length(mfri.Matrix[1,]) + 1))
+{
+  for(h in 1:length(b.unit$unit))
+  {
+    unit.TSLF[h,i] <- (sum(Area.List[Stand.List %in% 
+                                       Stand.List[x2.tslf == i & MU.List == b.unit$unit[h]]])/ 
+                         sum(Area.List[Stand.List %in% unit.stands[[h]]]))
+  }
+}
+
+#Find peaks in histogram with shortest TSLF. Use an itertive process that slowly
+#decreases the minimum area required to qualify as a peak
+#Go from 25%, to 0% in increments of 5%.
+ TSLFxUnits <- rep(0,length(b.unit$unit))
+increments <- c(0.25, 0.20, 0.15, 0.10, 0.05, 0.01,0)
+
+for(h in 1:length(increments))
+{
+  for(i in 1:length(b.unit$unit))
+  {
+    if(TSLFxUnits[i] == 0)
+    {
+      TSLFxUnits[i] <- ifelse(length(which(unit.TSLF[i,] > increments[h])) == 0, 
+                              0, min(which(unit.TSLF[i,] > increments[h])))
+    } else
+    {
+      TSLFxUnits[i] <- TSLFxUnits[i]
+    }
+  }
+}
+
+#Create a list for TSLF (i.e., rough age).
+write.table(TSLFxUnits, file = paste(output_path,
+  "/sef_", fpr, "_TSLF.List_",ss_rows,"x",ss_cols,".txt",
+  sep = ""), append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+  dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+    c("escape", "double"))#
+
+####################################################################################
+####################################################################################
+#STEP 6: Create a data frame that lists fuelbeds, stand numbers and time-since-
+#last treatment (tslt) for each stand that has been treated with thinning
+#or herbicide (i.e. the fourth integer in the fuelbed number is 2, 3, 4, 6, 7, or 8)
+
+#To test the accuracy of the tslt map measure the length of unique values in tslt
+#for each stand. If the map was produced correctly there should be one tslt value per
+#stand
+tslt.List <- vector()
+for(i in 1:length(Stand.List))
+{
+  tslt.List[i] <- length(unique(as.vector(tslt.map[s.map == Stand.List[i]])))
+}
+
+
+#Once we have verified that the map is accurate the next step is to create a
+#vector (.List) object for tslt. This lists the 
+tslt.Years <- vector()
+for(i in 1:length(Stand.List))
+{
+  tslt.Years[i] <- unique(as.vector(tslt.map[s.map == Stand.List[i]]))
+}
+
+
+#To reduce data load remove stands with no silvicultural treatments
+#The options() function changes how R returns number strings to characters, 
+#without it fuelbed numbers with lots of zeros are returned in scientific 
+#notation and the function to split the fourth integer will return a warning 
+#message. The tslt.TF object contains TRUE values for those stands with post-
+#treatment fuelbeds (i.e. fourth value is 2, 3, 4, 6, 7, or 8) which we want
+#to track the tslt of.
+options("scipen"=100, "digits"=4)
+tslt.TF <- vector()
+tslt.TF <- mapply(function(y)
+{
+  as.numeric(strsplit(as.character(y), "")[[1]])[4] %in% c(2,3,4,6,7,8)
+}, Fuelbed.List)
+ 
+#Create a data frame of post-treatment fuelbeds, their stand numbers and the tslt
+#in years
+#Time-since-last-treatment in years
+tslt.ShortList <- tslt.Years[tslt.TF == T]
+
+#Stand number
+Stand.ShortList <- Stand.List[tslt.TF == T]
+
+#Fuelbed number
+Fuelbed.ShortList <- Fuelbed.List[tslt.TF == T]
+
+#Stand age
+Age.ShortList <- Age.List[tslt.TF == T]
+
+#Area
+Area.ShortList <- Area.List[tslt.TF == T]
+
+ShortList <- data.frame(stand = Stand.ShortList, fuelbed = Fuelbed.ShortList, tslt = tslt.ShortList,
+                        Age = Age.ShortList, Area = Area.ShortList)
+
+#Test the data frame for stands that have the default age value, 88. This indicates some
+#kind of error in the mapping procedure
+ShortList[ShortList$tslt == 88,]
+sum(ShortList$Area[ShortList$tslt == 88])
+#Result: there are a few stands with a value of 88, but they only make up 81 pixels.
+#These stands will be converted into natural stands within the the first years in an
+#FDM run because the tslt exceeds the age threshold for post-treatment stands.
+
+#More testing, just out of curiousity look at the number of non-post-treatment stands
+#with tslt values that are not the default (88 years).
+tslt.LongList <- tslt.Years[tslt.TF == F]
+Stand.LongList <- Stand.List[tslt.TF == F]
+Fuelbed.LongList <- Fuelbed.List[tslt.TF == F]
+Age.LongList <- Age.List[tslt.TF == F]
+Area.LongList <- Area.List[tslt.TF == F]
+
+LongList <- data.frame(stand = Stand.LongList, fuelbed = Fuelbed.LongList, tslt = tslt.LongList,
+                       Age = Age.LongList, Area = Area.LongList)
+ELL <- LongList[LongList$tslt != 88,]
+length(ELL[,1])
+#Result: there are a lot, 12455 stands
+sum(ELL$Area)
+#Result: their total area is 299,239 pixels
+#This is actually not a big deal, just the product of the mapping procedure. These are stands
+#classified as non post-treatment fuelbeds in the mappig procedure but there was some treatment
+#history overlayed on the fuelbed. For instance. pixels classified as the rangeland fuelbed within
+#a treated area have a tslt attached, but were not converted into a post-treatment fuelbed because
+#there were no fuels to treat.
+
+#Save data.
+
+#TSLT in years
+write.table(tslt.ShortList, file = paste(output_path, "/sef_", fpr, "_tsltYears_",
+                                         ss_rows,"x",ss_cols,".txt",sep = ""), 
+            append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+            dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+              c("escape", "double"))#
+
+#Associated stand numbers
+write.table(Stand.ShortList, file = paste(output_path, "/sef_", fpr, "_tsltStand_",
+                                          ss_rows,"x",ss_cols,".txt",sep = ""), 
+            append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+            dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+              c("escape", "double"))#
+
+#Associated fuelbed numbers
+write.table(Fuelbed.ShortList, file = paste(output_path, "/sef_", fpr, "_tsltFuelbed_",
+                                            ss_rows,"x",ss_cols,".txt",sep = ""), 
+            append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+            dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+              c("escape", "double"))#
+
+#This section creates a .List for the upper and lower bounds of mean fire return
+#intervals associated with the fuelbed for each stand. This may seem redundant but
+#it will make FDM operate faster by negating the need to loop a sample()
+#function for each stand after each year. This is unnecessary if there is not
+#more than one fuelbed option as the mean fire return interval increases or decreases.
+
+mfri_shortens <- fuelbed_lut$mfri_shortens[match(Fuelbed.List,fuelbed_lut$fuelbed)]
+mfri_lengthens_1 <- fuelbed_lut$mfri_lengthens_1[match(Fuelbed.List,fuelbed_lut$fuelbed)]
+mfri_lengthens_2 <- fuelbed_lut$mfri_lengthens_2[match(Fuelbed.List,fuelbed_lut$fuelbed)]
+mfri_lengthens <- apply(matrix(data = c(mfri_lengthens_1,mfri_lengthens_2),
+                               length(mfri_lengthens_1), 2), 1, sample, size = 1)
+
+#Create lower mean fire return interval boundary List.
+write.table(mfri_shortens, file = paste(output_path, "/sef_", fpr, "_shorter_mfri_",
+                                        ss_rows,"x",ss_cols,".txt",sep = ""), 
+            append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+            dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+              c("escape", "double"))#
+
+#Create upper mean fire return interval boundary List.
+write.table(mfri_lengthens, file = paste(output_path, "/sef_", fpr, "_longer_mfri_",
+                                         ss_rows,"x",ss_cols,".txt",sep = ""), 
+            append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+            dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+              c("escape", "double"))#
+
+####################################################################################
+####################################################################################
+#STEP 7: Trim the unit table to match the new map size.
+#Set up new burn unit table
+
+#Identify burn units in trimmed map.
+burn.units <- sort(unique(as.vector(b.map)))
+
+#Calculate new burn areas
+burn.unit.area <- mapply(function(y)
+  {
+  length(b.map[b.map == y])
+}, burn.units)
+
+#Pull treatment info from original burn unit table for remaining burn units in
+#trimmed map.
+burn.unit.info <- b.unit[b.unit$unit %in% burn.units,]
+
+burn.unit.info$area_pixels <- burn.unit.area
+
+#Write updated table.
+write.table(burn.unit.info, file = paste(output_path, "/sef_", fpr, "_lut_burn_units.txt",sep = ""), 
+            append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+            dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+              c("escape", "double"))#
+
+####################################################################################
+####################################################################################
+#STEP 8: Trim the probability table that corresponds with the burn unit table.
+#Set up new burn unit table
+
+
+#Pull treatment info from original burn unit table for remaining burn units in
+#trimmed map.
+f.start.info <- f.start[f.start$BurnBlock %in% burn.units,]
+
+f.start.info$Area <- burn.unit.area
+
+#Write updated table.
+write.table(f.start.info, file = paste(output_path, "/sef_", fpr, "_lut_pathways_fireStart.txt",sep = ""), 
+            append = FALSE, quote = TRUE, sep = ",", eol = "\n", na = "NA", 
+            dec = ".", row.names = TRUE,col.names = NA, qmethod = 
+              c("escape", "double"))#
+
+
+#-----------------------------------------END---------------------------------------

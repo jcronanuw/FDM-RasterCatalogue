@@ -1210,7 +1210,7 @@ md.valu <- as.vector(unlist(metadata[,2]))
    
     #The number of fires per year is drawn from the Poisson Distribution (Wimberly 2002)
     #FF = Annual Fire Frequency. This is calculated in step 7.
-    fino.e <- 6 #<- min(rpois(1,FF.e),Truncate.Number[1])
+    fino.e <- 2 #<- min(rpois(1,FF.e),Truncate.Number[1])
     #For the buffer zone the number of fires is predicted by the number of fires at
     #Eglin so the severity of the wildfire season is synchronized.
     fino.b <- min(round((max(1,fino.e)*(FF.b/FF.e)),0),Truncate.Number[2])
@@ -1222,7 +1222,7 @@ md.valu <- as.vector(unlist(metadata[,2]))
       } else
         {
           #Fire area code. Uses the log normal distribution to assign fire areas to each fire.
-          fiar.e <- c(1634, 507, 315, 179, 475, 4863)#rlnorm(fino.e,Mu.e,Sigma.e)
+          fiar.e <- c(1634, 507)#rlnorm(fino.e,Mu.e,Sigma.e)
           
           #This step restricts the maximum fire size to that specified by the user (11,978 
           #acres as of 11-Aug-2015). This step will on average reduce the fire cycle by ?? years.
@@ -2477,6 +2477,7 @@ md.valu <- as.vector(unlist(metadata[,2]))
      
      #Update fire progression map
      fireProg.map[fireProg.map < 0] <- fireProg.map[fireProg.map < 0] - 1
+     fireProg.map[fireProg.map < -5] <- -5
      fireProg.map[s.map == tesn] <- tesn
      
      #Seprate header metadata into seperate lines.
@@ -2924,6 +2925,7 @@ md.valu <- as.vector(unlist(metadata[,2]))
       
       #Update fire progression map
       fireProg.map[fireProg.map < 0] <- fireProg.map[fireProg.map < 0] - 1
+      fireProg.map[fireProg.map < -5] <- -5
       fireProg.map[s.map == ((g*-1)-1)] <- -1
       
       #Seprate header metadata into seperate lines.
@@ -3025,6 +3027,7 @@ md.valu <- as.vector(unlist(metadata[,2]))
    
   #Update fire progression map
   fireProg.map[fireProg.map < 0] <- fireProg.map[fireProg.map < 0] - 1
+  fireProg.map[fireProg.map < -5] <- -5
   fireProg.map[s.map %in% s.map[scd] * tesn_t] <- -1
   
   #Seprate header metadata into seperate lines.
@@ -3196,6 +3199,7 @@ md.valu <- as.vector(unlist(metadata[,2]))
          
          #Update fire progression map
          fireProg.map[fireProg.map < 0] <- fireProg.map[fireProg.map < 0] - 1
+         fireProg.map[fireProg.map < -5] <- -5
          fireProg.map[new.cells] <- -1
          
          #Seprate header metadata into seperate lines.
